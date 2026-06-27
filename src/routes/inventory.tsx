@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
-import { Search, Download, Filter, MoreHorizontal } from "lucide-react";
+import { DemoSandboxDrawer } from "@/components/DemoSandboxDrawer";
+import { Search, Download, Filter, MoreHorizontal, FlaskConical } from "lucide-react";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({
@@ -49,6 +50,7 @@ const statusStyles: Record<Status, string> = {
 function InventoryPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"All" | Status>("All");
+  const [sandboxOpen, setSandboxOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
