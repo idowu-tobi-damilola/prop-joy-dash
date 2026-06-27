@@ -96,6 +96,13 @@ function InventoryPage() {
             <button className="shrink-0 grid place-items-center size-9 rounded-lg border border-border bg-background hover:bg-muted" aria-label="More filters">
               <Filter className="size-4" />
             </button>
+            <button
+              onClick={() => setSandboxOpen(true)}
+              className="shrink-0 inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/10 text-orange-600 dark:text-orange-400 px-3 py-2 text-sm font-semibold hover:bg-orange-500/20"
+            >
+              <FlaskConical className="size-4" />
+              <span className="hidden sm:inline">Sandbox</span>
+            </button>
             <button className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-accent text-accent-foreground px-3 py-2 text-sm font-semibold hover:opacity-90">
               <Download className="size-4" />
               <span className="hidden sm:inline">Export</span>
@@ -184,6 +191,8 @@ function InventoryPage() {
           </div>
         ))}
       </div>
+
+      <DemoSandboxDrawer open={sandboxOpen} onClose={() => setSandboxOpen(false)} />
     </AdminShell>
   );
 }
