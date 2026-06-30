@@ -79,8 +79,41 @@ function buildStats(metrics: DashboardMetrics | null) {
 }
 
 function MetricsPage() {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(METRICS_ENDPOINT);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as DashboardMetrics;
+        if (!cancelled) setMetrics(json);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load metrics");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stats = buildStats(metrics);
+
   return (
     <AdminShell title="Overview" subtitle="Track revenue collected via Nomba virtual accounts and automated allocations.">
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive px-4 py-3 text-sm">
+          Couldn't reach metrics endpoint ({error}). Showing placeholder values.
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
         {stats.map((s) => {
           const Icon = s.icon;
