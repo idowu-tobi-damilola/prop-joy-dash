@@ -26,20 +26,35 @@ interface Row {
   status: Status;
 }
 
-const rows: Row[] = [
-  { buyer: "Chinedu Okafor", email: "chinedu.o@gmail.com", amount: 4_500_000, plot: "B-204", status: "Pending" },
-  { buyer: "Aisha Bello", email: "aisha.bello@yahoo.com", amount: 7_200_000, plot: "C-118", status: "Fully Allocated" },
-  { buyer: "Tunde Adekola", email: "tunde@adekola.co", amount: 12_000_000, plot: "A-031", status: "Fully Allocated" },
-  { buyer: "Grace Eze", email: "grace.eze@outlook.com", amount: 3_800_000, plot: "B-207", status: "Pending" },
-  { buyer: "Ibrahim Musa", email: "imusa@gmail.com", amount: 9_650_000, plot: "D-052", status: "Fully Allocated" },
+interface ApiProperty {
+  buyer_name?: string | null;
+  email?: string | null;
+  plot?: string | null;
+  status?: string | null;
+  amount?: number | null;
+  amount_paid?: number | null;
+}
+
+const fallbackRows: Row[] = [
   { buyer: "—", email: "—", amount: 0, plot: "A-032", status: "Available" },
-  { buyer: "Funke Akindele", email: "funke.a@gmail.com", amount: 6_400_000, plot: "C-119", status: "Fully Allocated" },
-  { buyer: "—", email: "—", amount: 0, plot: "D-053", status: "Available" },
-  { buyer: "Emeka Nwosu", email: "emeka.n@protonmail.com", amount: 2_100_000, plot: "B-208", status: "Pending" },
-  { buyer: "Zainab Lawal", email: "zainab.lawal@gmail.com", amount: 8_800_000, plot: "C-120", status: "Fully Allocated" },
-  { buyer: "—", email: "—", amount: 0, plot: "A-033", status: "Available" },
-  { buyer: "Olu Adebayo", email: "olu.a@hotmail.com", amount: 5_200_000, plot: "B-209", status: "Pending" },
 ];
+
+function normalizeStatus(s: string | null | undefined): Status {
+  const v = (s ?? "").toLowerCase();
+  if (v.includes("alloc")) return "Fully Allocated";
+  if (v.includes("pend")) return "Pending";
+  return "Available";
+}
+
+function mapProperty(p: ApiProperty): Row {
+  return {
+    buyer: p.buyer_name?.trim() || "—",
+    email: p.email?.trim() || "—",
+    amount: p.amount_paid ?? p.amount ?? 0,
+    plot: p.plot ?? "—",
+    status: normalizeStatus(p.status),
+  };
+}
 
 const ngn = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
