@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
 import { DemoSandboxDrawer } from "@/components/DemoSandboxDrawer";
-import { Search, Download, Filter, MoreHorizontal, FlaskConical } from "lucide-react";
+import { Search, Download, Filter, MoreHorizontal, FlaskConical, Loader2 } from "lucide-react";
+
+const PROPERTIES_ENDPOINT = "http://localhost:5000/api/v1/properties";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({
