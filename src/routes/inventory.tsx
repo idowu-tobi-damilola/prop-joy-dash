@@ -157,6 +157,17 @@ function InventoryPage() {
         </div>
       </div>
 
+      {loading && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading properties from backend…
+        </div>
+      )}
+      {error && !loading && (
+        <div className="mb-5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Couldn't reach properties endpoint ({error}).
+        </div>
+      )}
+
       {/* Desktop table */}
       <div className="hidden md:block rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden">
         <div className="overflow-x-auto">
