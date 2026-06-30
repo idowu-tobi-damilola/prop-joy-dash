@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
 import { DemoSandboxDrawer } from "@/components/DemoSandboxDrawer";
-import { Search, Download, Filter, MoreHorizontal, FlaskConical } from "lucide-react";
+import { Search, Download, Filter, MoreHorizontal, FlaskConical, Loader2 } from "lucide-react";
+
+const PROPERTIES_ENDPOINT = "http://localhost:5000/api/v1/properties";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({
@@ -24,20 +26,35 @@ interface Row {
   status: Status;
 }
 
-const rows: Row[] = [
-  { buyer: "Chinedu Okafor", email: "chinedu.o@gmail.com", amount: 4_500_000, plot: "B-204", status: "Pending" },
-  { buyer: "Aisha Bello", email: "aisha.bello@yahoo.com", amount: 7_200_000, plot: "C-118", status: "Fully Allocated" },
-  { buyer: "Tunde Adekola", email: "tunde@adekola.co", amount: 12_000_000, plot: "A-031", status: "Fully Allocated" },
-  { buyer: "Grace Eze", email: "grace.eze@outlook.com", amount: 3_800_000, plot: "B-207", status: "Pending" },
-  { buyer: "Ibrahim Musa", email: "imusa@gmail.com", amount: 9_650_000, plot: "D-052", status: "Fully Allocated" },
+interface ApiProperty {
+  buyer_name?: string | null;
+  email?: string | null;
+  plot?: string | null;
+  status?: string | null;
+  amount?: number | null;
+  amount_paid?: number | null;
+}
+
+const fallbackRows: Row[] = [
   { buyer: "—", email: "—", amount: 0, plot: "A-032", status: "Available" },
-  { buyer: "Funke Akindele", email: "funke.a@gmail.com", amount: 6_400_000, plot: "C-119", status: "Fully Allocated" },
-  { buyer: "—", email: "—", amount: 0, plot: "D-053", status: "Available" },
-  { buyer: "Emeka Nwosu", email: "emeka.n@protonmail.com", amount: 2_100_000, plot: "B-208", status: "Pending" },
-  { buyer: "Zainab Lawal", email: "zainab.lawal@gmail.com", amount: 8_800_000, plot: "C-120", status: "Fully Allocated" },
-  { buyer: "—", email: "—", amount: 0, plot: "A-033", status: "Available" },
-  { buyer: "Olu Adebayo", email: "olu.a@hotmail.com", amount: 5_200_000, plot: "B-209", status: "Pending" },
 ];
+
+function normalizeStatus(s: string | null | undefined): Status {
+  const v = (s ?? "").toLowerCase();
+  if (v.includes("alloc")) return "Fully Allocated";
+  if (v.includes("pend")) return "Pending";
+  return "Available";
+}
+
+function mapProperty(p: ApiProperty): Row {
+  return {
+    buyer: p.buyer_name?.trim() || "—",
+    email: p.email?.trim() || "—",
+    amount: p.amount_paid ?? p.amount ?? 0,
+    plot: p.plot ?? "—",
+    status: normalizeStatus(p.status),
+  };
+}
 
 const ngn = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
@@ -51,6 +68,35 @@ function InventoryPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"All" | Status>("All");
   const [sandboxOpen, setSandboxOpen] = useState(false);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(PROPERTIES_ENDPOINT);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const list: ApiProperty[] = Array.isArray(json) ? json : json?.properties ?? json?.data ?? [];
+        if (!cancelled) setRows(list.map(mapProperty));
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load properties");
+          setRows(fallbackRows);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -62,7 +108,7 @@ function InventoryPage() {
       const matchesFilter = filter === "All" || r.status === filter;
       return matchesQuery && matchesFilter;
     });
-  }, [query, filter]);
+  }, [rows, query, filter]);
 
   return (
     <AdminShell title="Property Inventory" subtitle="All plots, buyer assignments, and allocation status.">
@@ -110,6 +156,17 @@ function InventoryPage() {
           </div>
         </div>
       </div>
+
+      {loading && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading properties from backend…
+        </div>
+      )}
+      {error && !loading && (
+        <div className="mb-5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Couldn't reach properties endpoint ({error}).
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden md:block rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden">

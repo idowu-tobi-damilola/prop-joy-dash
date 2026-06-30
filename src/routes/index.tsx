@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
 import {
@@ -7,7 +8,16 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from "lucide-react";
+
+const METRICS_ENDPOINT = "http://localhost:5000/api/v1/dashboard-metrics";
+
+interface DashboardMetrics {
+  total_revenue_ngn: number;
+  allocated_plots_count: number;
+  pending_validation_count: number;
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,13 +31,6 @@ export const Route = createFileRoute("/")({
 
 const ngn = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
 
-const stats = [
-  { label: "Total Revenue", value: ngn.format(482_500_000), change: "+12.4%", trend: "up", icon: Wallet, hint: "via Nomba virtual accounts" },
-  { label: "Plots Sold", value: "147", change: "+8.1%", trend: "up", icon: Home, hint: "across 4 estates" },
-  { label: "Allocations Issued", value: "132", change: "+5.6%", trend: "up", icon: CheckCircle2, hint: "auto-generated documents" },
-  { label: "Pending Allocations", value: "15", change: "-2.0%", trend: "down", icon: TrendingUp, hint: "awaiting confirmation" },
-] as const;
-
 const recentTxns = [
   { ref: "NMB-8821", buyer: "Chinedu Okafor", plot: "B-204", amount: 4_500_000, time: "2 min ago" },
   { ref: "NMB-8820", buyer: "Aisha Bello", plot: "C-118", amount: 7_200_000, time: "18 min ago" },
@@ -36,9 +39,81 @@ const recentTxns = [
   { ref: "NMB-8817", buyer: "Ibrahim Musa", plot: "D-052", amount: 9_650_000, time: "Yesterday" },
 ];
 
+function buildStats(metrics: DashboardMetrics | null) {
+  return [
+    {
+      label: "Total Revenue",
+      value: metrics ? ngn.format(metrics.total_revenue_ngn) : "—",
+      change: "+12.4%",
+      trend: "up" as const,
+      icon: Wallet,
+      hint: "via Nomba virtual accounts",
+    },
+    {
+      label: "Allocated Plots",
+      value: metrics ? String(metrics.allocated_plots_count) : "—",
+      change: "+8.1%",
+      trend: "up" as const,
+      icon: Home,
+      hint: "fully allocated to buyers",
+    },
+    {
+      label: "Pending Validation",
+      value: metrics ? String(metrics.pending_validation_count) : "—",
+      change: "-2.0%",
+      trend: "down" as const,
+      icon: CheckCircle2,
+      hint: "awaiting confirmation",
+    },
+    {
+      label: "Active Listings",
+      value: metrics
+        ? String(Math.max(0, 210 - metrics.allocated_plots_count - metrics.pending_validation_count))
+        : "—",
+      change: "+1.4%",
+      trend: "up" as const,
+      icon: TrendingUp,
+      hint: "available inventory",
+    },
+  ];
+}
+
 function MetricsPage() {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(METRICS_ENDPOINT);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as DashboardMetrics;
+        if (!cancelled) setMetrics(json);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load metrics");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stats = buildStats(metrics);
+
   return (
     <AdminShell title="Overview" subtitle="Track revenue collected via Nomba virtual accounts and automated allocations.">
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive px-4 py-3 text-sm">
+          Couldn't reach metrics endpoint ({error}). Showing placeholder values.
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
         {stats.map((s) => {
           const Icon = s.icon;
@@ -64,7 +139,9 @@ function MetricsPage() {
               </div>
               <div className="mt-5">
                 <div className="text-sm text-muted-foreground">{s.label}</div>
-                <div className="mt-1 font-display text-2xl sm:text-3xl font-bold text-foreground truncate">{s.value}</div>
+                <div className="mt-1 font-display text-2xl sm:text-3xl font-bold text-foreground truncate">
+                  {loading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : s.value}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground">{s.hint}</div>
               </div>
             </div>
