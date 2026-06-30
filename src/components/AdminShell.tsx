@@ -9,12 +9,14 @@ import {
   Bell,
   ChevronLeft,
   LogOut,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Metrics", to: "/", icon: LayoutDashboard },
   { label: "Inventory", to: "/inventory", icon: Building2 },
+  { label: "Webhook Events", to: "/webhook-events", icon: Webhook },
 ] as const;
 
 function useIsMobile() {

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
 import { DemoSandboxDrawer } from "@/components/DemoSandboxDrawer";
-import { Search, Download, Filter, MoreHorizontal, FlaskConical, Loader2 } from "lucide-react";
+import { VirtualAccountModal } from "@/components/VirtualAccountModal";
+import { Search, Download, Filter, FlaskConical, Loader2, Banknote, FileText, Send, Clock } from "lucide-react";
 
 const PROPERTIES_ENDPOINT = "http://localhost:5000/api/v1/properties";
 
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/inventory")({
 });
 
 type Status = "Available" | "Pending" | "Fully Allocated";
+type AllocationStatus = "None" | "Pending PDF" | "Letter Sent" | "Delivered";
 
 interface Row {
   buyer: string;
@@ -24,6 +26,8 @@ interface Row {
   amount: number;
   plot: string;
   status: Status;
+  estate: string;
+  allocation: AllocationStatus;
 }
 
 interface ApiProperty {
@@ -33,10 +37,12 @@ interface ApiProperty {
   status?: string | null;
   amount?: number | null;
   amount_paid?: number | null;
+  estate?: string | null;
+  allocation_status?: string | null;
 }
 
 const fallbackRows: Row[] = [
-  { buyer: "—", email: "—", amount: 0, plot: "A-032", status: "Available" },
+  { buyer: "—", email: "—", amount: 0, plot: "A-032", status: "Available", estate: "Amen Estate", allocation: "None" },
 ];
 
 function normalizeStatus(s: string | null | undefined): Status {
@@ -46,6 +52,14 @@ function normalizeStatus(s: string | null | undefined): Status {
   return "Available";
 }
 
+function normalizeAllocation(s: string | null | undefined): AllocationStatus {
+  const v = (s ?? "").toLowerCase();
+  if (v.includes("deliver") || v.includes("whatsapp")) return "Delivered";
+  if (v.includes("sent")) return "Letter Sent";
+  if (v.includes("pdf") || v.includes("pending")) return "Pending PDF";
+  return "None";
+}
+
 function mapProperty(p: ApiProperty): Row {
   return {
     buyer: p.buyer_name?.trim() || "—",
@@ -53,6 +67,8 @@ function mapProperty(p: ApiProperty): Row {
     amount: p.amount_paid ?? p.amount ?? 0,
     plot: p.plot ?? "—",
     status: normalizeStatus(p.status),
+    estate: p.estate?.trim() || "Unassigned",
+    allocation: normalizeAllocation(p.allocation_status),
   };
 }
 
@@ -64,10 +80,26 @@ const statusStyles: Record<Status, string> = {
   "Fully Allocated": "bg-success/15 text-success ring-1 ring-success/30",
 };
 
+const allocStyles: Record<AllocationStatus, string> = {
+  None: "text-muted-foreground",
+  "Pending PDF": "text-warning-foreground",
+  "Letter Sent": "text-accent",
+  Delivered: "text-success",
+};
+
+const allocIcon: Record<AllocationStatus, typeof FileText> = {
+  None: FileText,
+  "Pending PDF": Clock,
+  "Letter Sent": FileText,
+  Delivered: Send,
+};
+
 function InventoryPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"All" | Status>("All");
+  const [estate, setEstate] = useState<string>("All Estates");
   const [sandboxOpen, setSandboxOpen] = useState(false);
+  const [vaPlot, setVaPlot] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,10 +125,13 @@ function InventoryPage() {
       }
     }
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
+
+  const estates = useMemo(() => {
+    const set = new Set(rows.map((r) => r.estate));
+    return ["All Estates", ...Array.from(set).sort()];
+  }, [rows]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -106,9 +141,10 @@ function InventoryPage() {
         r.email.toLowerCase().includes(query.toLowerCase()) ||
         r.plot.toLowerCase().includes(query.toLowerCase());
       const matchesFilter = filter === "All" || r.status === filter;
-      return matchesQuery && matchesFilter;
+      const matchesEstate = estate === "All Estates" || r.estate === estate;
+      return matchesQuery && matchesFilter && matchesEstate;
     });
-  }, [rows, query, filter]);
+  }, [rows, query, filter, estate]);
 
   return (
     <AdminShell title="Property Inventory" subtitle="All plots, buyer assignments, and allocation status.">
@@ -125,6 +161,13 @@ function InventoryPage() {
             />
           </div>
           <div className="flex items-center gap-2 overflow-x-auto">
+            <select
+              value={estate}
+              onChange={(e) => setEstate(e.target.value)}
+              className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring/60"
+            >
+              {estates.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
             {(["All", "Available", "Pending", "Fully Allocated"] as const).map((f) => (
               <button
                 key={f}
@@ -177,40 +220,60 @@ function InventoryPage() {
                 <th className="px-5 py-3 font-semibold">Buyer Name</th>
                 <th className="px-5 py-3 font-semibold">Email</th>
                 <th className="px-5 py-3 font-semibold text-right">Amount Paid</th>
-                <th className="px-5 py-3 font-semibold">Plot Number</th>
+                <th className="px-5 py-3 font-semibold">Plot / Estate</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
-                <th className="px-5 py-3 w-12" />
+                <th className="px-5 py-3 font-semibold">Allocation Doc</th>
+                <th className="px-5 py-3 font-semibold text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((r) => (
-                <tr key={r.plot} className="hover:bg-secondary/30 transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="size-9 rounded-full bg-secondary text-secondary-foreground grid place-items-center text-xs font-bold shrink-0">
-                        {r.buyer === "—" ? "—" : initials(r.buyer)}
+              {filtered.map((r) => {
+                const AIcon = allocIcon[r.allocation];
+                return (
+                  <tr key={r.plot} className="hover:bg-secondary/30 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="size-9 rounded-full bg-secondary text-secondary-foreground grid place-items-center text-xs font-bold shrink-0">
+                          {r.buyer === "—" ? "—" : initials(r.buyer)}
+                        </div>
+                        <span className="font-medium text-foreground">{r.buyer}</span>
                       </div>
-                      <span className="font-medium text-foreground">{r.buyer}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground">{r.email}</td>
-                  <td className="px-5 py-4 text-right font-semibold tabular-nums">
-                    {r.amount ? ngn.format(r.amount) : <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-5 py-4 font-mono text-sm">{r.plot}</td>
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[r.status]}`}>
-                      <span className="size-1.5 rounded-full bg-current opacity-70" />
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <button className="grid size-8 place-items-center rounded-md hover:bg-muted text-muted-foreground" aria-label="Actions">
-                      <MoreHorizontal className="size-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-5 py-4 text-muted-foreground">{r.email}</td>
+                    <td className="px-5 py-4 text-right font-semibold tabular-nums">
+                      {r.amount ? ngn.format(r.amount) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="font-mono text-sm">{r.plot}</div>
+                      <div className="text-xs text-muted-foreground">{r.estate}</div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyles[r.status]}`}>
+                        <span className="size-1.5 rounded-full bg-current opacity-70" />
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${allocStyles[r.allocation]}`}>
+                        <AIcon className="size-3.5" />
+                        {r.allocation}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      {r.status === "Available" ? (
+                        <button
+                          onClick={() => setVaPlot(r.plot)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 text-accent ring-1 ring-accent/30 px-2.5 py-1.5 text-xs font-semibold hover:bg-accent/20"
+                        >
+                          <Banknote className="size-3.5" /> Generate VA
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -227,29 +290,47 @@ function InventoryPage() {
 
       {/* Mobile cards */}
       <div className="md:hidden grid grid-cols-1 gap-3">
-        {filtered.map((r) => (
-          <div key={r.plot} className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs px-2 py-0.5 rounded bg-secondary">{r.plot}</span>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusStyles[r.status]}`}>
-                    {r.status}
-                  </span>
+        {filtered.map((r) => {
+          const AIcon = allocIcon[r.allocation];
+          return (
+            <div key={r.plot} className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-secondary">{r.plot}</span>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusStyles[r.status]}`}>
+                      {r.status}
+                    </span>
+                  </div>
+                  <div className="mt-2 font-semibold truncate">{r.buyer}</div>
+                  <div className="text-xs text-muted-foreground truncate">{r.email}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">{r.estate}</div>
                 </div>
-                <div className="mt-2 font-semibold truncate">{r.buyer}</div>
-                <div className="text-xs text-muted-foreground truncate">{r.email}</div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs text-muted-foreground">Paid</div>
+                  <div className="font-bold tabular-nums">{r.amount ? ngn.format(r.amount) : "—"}</div>
+                </div>
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-xs text-muted-foreground">Paid</div>
-                <div className="font-bold tabular-nums">{r.amount ? ngn.format(r.amount) : "—"}</div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${allocStyles[r.allocation]}`}>
+                  <AIcon className="size-3.5" /> {r.allocation}
+                </span>
+                {r.status === "Available" && (
+                  <button
+                    onClick={() => setVaPlot(r.plot)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 text-accent ring-1 ring-accent/30 px-2.5 py-1.5 text-xs font-semibold"
+                  >
+                    <Banknote className="size-3.5" /> Generate VA
+                  </button>
+                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <DemoSandboxDrawer open={sandboxOpen} onClose={() => setSandboxOpen(false)} />
+      <VirtualAccountModal open={vaPlot !== null} onClose={() => setVaPlot(null)} plot={vaPlot ?? ""} />
     </AdminShell>
   );
 }
