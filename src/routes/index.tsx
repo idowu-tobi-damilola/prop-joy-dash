@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/AdminShell";
 import {
@@ -7,7 +8,16 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from "lucide-react";
+
+const METRICS_ENDPOINT = "http://localhost:5000/api/v1/dashboard-metrics";
+
+interface DashboardMetrics {
+  total_revenue_ngn: number;
+  allocated_plots_count: number;
+  pending_validation_count: number;
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
